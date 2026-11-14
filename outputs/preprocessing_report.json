@@ -1,0 +1,81 @@
+{
+    "dataset_name": "Amazon MASSIVE (en-US subset)",
+    "course": "Natural Language Processing (A0443404) - Middle East University (MEU)",
+    "task": "Intent Classification (Single-label Multi-class)",
+    "total_samples": 16521,
+    "num_classes": 60,
+    "raw_text_metrics": {
+        "vocab_size": 6328,
+        "avg_word_count": 6.9,
+        "std_word_count": 3.29,
+        "min_word_count": 1,
+        "max_word_count": 61,
+        "avg_char_length": 34.92
+    },
+    "clean_text_metrics": {
+        "vocab_size": 5420,
+        "avg_word_count": 3.88,
+        "std_word_count": 1.83,
+        "min_word_count": 0,
+        "max_word_count": 31,
+        "avg_char_length": 23.34,
+        "vocab_reduction_pct": 14.35
+    },
+    "class_distribution_summary": {
+        "num_unique_intents": 60,
+        "min_samples_per_intent": 6,
+        "max_samples_per_intent": 1150,
+        "mean_samples_per_intent": 275.35,
+        "is_balanced": false
+    },
+    "top_10_intents": {
+        "calendar_set": 1150,
+        "play_music": 938,
+        "weather_query": 855,
+        "general_quirky": 829,
+        "calendar_query": 794,
+        "qa_factoid": 775,
+        "news_query": 709,
+        "email_query": 610,
+        "email_sendemail": 531,
+        "datetime_query": 502
+    },
+    "bottom_5_intents": {
+        "iot_hue_lighton": 30,
+        "general_greet": 28,
+        "audio_volume_other": 24,
+        "music_dislikeness": 20,
+        "cooking_query": 6
+    },
+    "scenario_distribution": {
+        "calendar": 2370,
+        "play": 2024,
+        "qa": 1685,
+        "email": 1381,
+        "iot": 1107,
+        "general": 963,
+        "weather": 855,
+        "transport": 805,
+        "lists": 793,
+        "news": 709,
+        "recommendation": 596,
+        "datetime": 578,
+        "social": 565,
+        "alarm": 550,
+        "music": 469,
+        "audio": 387,
+        "takeaway": 358,
+        "cooking": 326
+    },
+    "split_distribution": {
+        "train_samples": 13214,
+        "train_pct": 79.98,
+        "val_samples": 1652,
+        "val_pct": 10.0,
+        "test_samples": 1655,
+        "test_pct": 10.02,
+        "classes_in_train": 60,
+        "classes_in_val": 60,
+        "classes_in_test": 60
+    }
+}
