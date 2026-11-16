@@ -1,175 +1,128 @@
-# Middle East University (MEU)
-## Faculty of Information Technology
-### Course: Natural Language Processing (A0443404) — First Semester 2026/2027
-**Course Instructors:** Dr. Israa Al Badarneh · Dr. Zaid Alhalhouli  
-**Project Phase:** Phase 1 — Project Proposal & NLP Data Preparation (PBL Project)
+# Middle East University (MEU) — Faculty of Information Technology
+## Natural Language Processing (A0443404) · First Semester 2026/2027
+**Instructors:** Dr. Israa Al Badarneh · Dr. Zaid Alhalhouli
+**Phase 1:** Project Proposal & NLP Data Preparation (Week 5, due 16/11/2026)
+
+> The submitted version is the filled official form (`NLP_Project_Proposal_Form_Phase1_Filled.docx`, PDF copy in the project root). This file is the same content in Markdown.
 
 ---
 
-# PART A: Project Information
+## Part A: Group information
 
-- **Project Title:** High-Precision Intent Classification for Virtual Assistants Using the Amazon MASSIVE Dataset
-- **NLP Problem / Application:** User Intent Detection and Command Understanding for Conversational AI
-- **NLP Task:** Single-Label Multi-Class Text Classification (60 Intent Classes across 18 Scenarios)
-- **Dataset Name & Source:** Amazon MASSIVE (en-US localization, 16,521 instances)  
-  *Repository:* [Amazon Science MASSIVE](https://github.com/alexa/massive) / [AWS Open Data](https://amazon-massive-nlu-dataset.s3.amazonaws.com/amazon-massive-dataset-1.0.tar.gz)
-- **Programming Language:** Python 3.12+ / 3.14+
-- **Primary Libraries:** NLTK, scikit-learn, pandas, numpy (Phase 1); PyTorch, Hugging Face Transformers (Phases 2 & 3)
+| Item | Value |
+|---|---|
+| Project title | Intent Classification for Voice Assistants and Conversational Agents on the Amazon MASSIVE Dataset (TF-IDF + LinearSVC vs. DistilBERT) |
+| NLP problem / application | User intent detection for task-oriented voice assistants and chatbots; also usable for routing customer-support requests |
+| NLP task | Single-label multi-class text classification (60 intents, 18 scenarios) |
+| Dataset | Amazon MASSIVE v1.0, en-US subset (https://github.com/alexa/massive) |
+| Language / libraries | Python 3.12; Phase 1: NLTK, pandas, scikit-learn; Phases 2–3: scikit-learn, Hugging Face Transformers, PyTorch |
 
----
+## Part B: Group members
 
-# PART B: Group Members
-
-| # | Student Name | Role in Team | Key Responsibilities |
-|---|--------------|--------------|----------------------|
-| 1 | **Karam Abdallah Abdelkarim Abu-Juma'a** | **Group Leader** | Architecture design, data ingestion pipeline, EDA metrics, stratified splitting logic, documentation lead |
-| 2 | **Omar** | Team Member | Contraction mapping, regex text cleaning, negation-aware stop-word filtering |
-| 3 | **Osama** | Team Member | WordNet lemmatization, tokenization benchmarking, dataset validation, quality control |
+| # | Student | Role |
+|---|---|---|
+| 1 | Karam Abdallah Abdelkarim Abu-Juma'a (leader) | Data ingestion, stratified split, EDA report, documentation |
+| 2 | Omar Al-Zubaidi | Contraction map, regex normalisation, stop-word policy |
+| 3 | Osama Shqair | Lemmatization, preprocessing ablation, dataset validation and quality control |
 
 ---
 
-# SECTION 1: Problem Description & Objectives
+## Section 1: Problem description & objectives
 
-### Problem
-Modern intelligent virtual assistants (e.g., Alexa, Siri, Google Assistant) and customer service bots must rapidly and accurately interpret natural language voice or text commands. Because real-world human phrasing is highly diverse, colloquial, and prone to conversational noise, spoken or typed commands must be mapped to discrete executable actions (intents).
+- **Problem:** voice assistants and chatbots must map a short, informal request to one action (an intent). Wording varies a lot, so keyword matching fails.
+- **Motivation:** a wrong intent triggers the wrong action (setting an alarm instead of querying alarms, lights on instead of off). Intent detection is the first step of every task-oriented dialogue system.
+- **Users:** developers of voice assistants and chatbots, customer-support teams, end users.
+- **Input:** one short English utterance (mean 6.9 words), e.g. *"wake me up at five am this week"*.
+- **Output:** one of 60 intent labels, e.g. `alarm_set`, `iot_hue_lightoff`.
+- **Objectives:** (1) define the problem and prepare MASSIVE en-US (audit, de-duplicate, clean, split 80/10/10); (2) build a justified preprocessing pipeline that keeps intent-bearing words; (3) verify it with an ablation; (4) in Phases 2–3 compare TF-IDF + LinearSVC with fine-tuned DistilBERT.
 
-### Motivation
-Misclassifying an intent degrades user experience and can trigger erroneous automated workflows (e.g., triggering `alarm_set` instead of `timer_set`, or misinterpreting a negative command such as *"do not play music"*). Developing a robust NLP intent detection pipeline is a fundamental prerequisite for trustworthy task-oriented dialogue systems.
+## Section 2: NLP task definition
 
-### Target Users
-- Developers and engineers building conversational AI interfaces and voice assistants.
-- End-users seeking seamless automated interactions without restrictive command syntax.
-- Enterprise customer-support automation platforms.
+- **Task type:** text classification (multi-class, single label).
+- **Model input:** the utterance after preprocessing (`clean_text` or `norm_text`); transformers read the raw text.
+- **Target:** one intent class among 60.
+- **Success criterion:** macro-F1 (primary, classes are very imbalanced), accuracy, per-class errors and confusion matrix on the held-out test split; inference time for the TF-IDF vs. DistilBERT comparison.
+- **Why this task fits:** it needs a text representation, a classifier and task-appropriate metrics, the comparison the course project asks for.
 
-### Inputs & Outputs
-- **Input:** Raw conversational utterance strings (e.g., *"remind me to call John at five pm"* or *"turn off the living room lights"*).
-- **Output:** Categorical intent label out of 60 predefined target classes (e.g., `calendar_set`, `iot_hue_lightoff`).
+## Section 3: Dataset description
 
-### Project Objectives
-1. Build an automated, flash-drive-portable data ingestion and normalization pipeline for conversational text.
-2. Develop a negation-preserving text preprocessing workflow (preserving tokens like *"not"*, *"no"*) and expand colloquial contractions.
-3. Establish a mathematically verified 80/10/10 stratified dataset partition across all 60 intent categories.
-4. Set the foundation for Phase 2 feature representations (TF-IDF vs. dense contextual transformer embeddings) and model benchmarking.
+| Item | Value |
+|---|---|
+| Source | Amazon MASSIVE v1.0 (FitzGerald et al., ACL 2023), en-US file |
+| Size | 16,521 utterances (official: train 11,514 / dev 2,033 / test 2,974); 16,439 after removing 82 exact duplicates; our split train 13,149 / val 1,642 / test 1,648 |
+| Fields | `id`, `utt`, `intent`, `scenario`, `partition`, `locale` (+ `clean_text`, `norm_text`) |
+| Classes | 60 intents, 18 scenarios; `calendar_set` 1,147 vs. `cooking_query` 6 (about 190:1) |
+| Language | English (en-US) |
+| Characteristics | 1–61 words (mean 6.9), lowercase ASCII, no digits/URLs/emojis; 1,324 utterances with apostrophes, 698 dotted abbreviations, 534 with the wake word "olly", 830 with 1–2 words, 7 texts with two intents |
+| License | CC BY 4.0 |
 
----
+## Section 4: Related work (2023+)
 
-# SECTION 2: NLP Task Definition
+| # | Reference | Method | Dataset | Reported results | Relevance |
+|---|---|---|---|---|---|
+| 1 | FitzGerald et al., 2023, ACL 2023 | MASSIVE release; XLM-R and mT5 baselines | MASSIVE (1M utterances, 51 languages, 60 intents) | Exact match, intent accuracy and slot F1 per language | Our dataset and its official task |
+| 2 | Zhang et al., 2023, Findings of ACL 2023 | Direct fine-tuning of PLMs (DFT, DFT++) for few-shot intent detection | Real-world few-shot intent benchmarks | With 2+ labeled samples per class, direct fine-tuning beats many continual-pre-training baselines | Supports fine-tuning DistilBERT directly |
+| 3 | Arora, Jain, Merugu, 2024, arXiv:2410.01627 | SetFit vs. 7 LLMs (in-context learning); hybrid routing | HINT3 + 3 internal e-commerce datasets | Avg F1: SetFit 0.600 (0.658 with negative augmentation) vs. best LLM 0.736; SetFit ~56x faster | Accuracy vs. latency trade-off |
+| 4 | Lichouri, Lounnas, Amziane, 2024, arXiv:2407.13565 | TF-IDF + LinearSVC, LSTM, transformers | ArBanking77 | Best micro-F1 93.02% dev, 67.21% test | Same TF-IDF + LinearSVC baseline; dev–test gap |
 
-- **NLP Task Type:** Multi-Class Single-Label Text Classification.
-- **Model Input:** Cleaned, lemmatized sequence of tokens representing the user utterance.
-- **Model Target:** Discrete intent class identifier $y \in \{C_1, C_2, \dots, C_{60}\}$.
-- **Success Criteria & Metrics:**
-  - **Macro-Averaged F1-Score:** Primary metric, essential due to class imbalance (samples per intent range from 6 to 1,150).
-  - **Overall Accuracy:** Secondary metric to assess total sample-level accuracy.
-  - **Confusion Matrix & Per-Class Error Analysis:** To diagnose boundary confusion between semantically adjacent intents (e.g., `email_query` vs. `email_sendemail`).
-- **Why this task fits:** Intent detection requires robust semantic comprehension, morphological normalization, and disambiguation over subtle phrasing differences, perfectly aligned with the course objectives.
+## Section 5: Text analysis & data-quality issues
 
----
+| Issue | Example | Handling |
+|---|---|---|
+| Contractions and apostrophes | "what's the time in australia" (1,324) | Contraction dictionary |
+| Dotted abbreviations / time markers | "four p. m.", "b. b. c." (698) | Collapse to `pm`, `bbc` |
+| Wake-word noise | "olly pause for ten seconds" (534) | Remove "olly" |
+| Duplicates and label noise | 89 duplicates; "good night" has two intents (7 texts) | Drop 82 exact duplicates; report conflicting texts |
+| Class imbalance | 1,147 vs. 6 samples | Stratified split, macro-F1, class weights in Phase 2 |
+| Very short utterances | 830 with 1–2 words | Keep; never delete intent-bearing words |
+| Intent words listed as stop-words | "turn the lights off/on" both became "turn light" | Customised stop-word list (conflicts 134 → 40) |
 
-# SECTION 3: Dataset Description
+## Section 6: Preprocessing plan
 
-- **Dataset Name:** Amazon MASSIVE (Massive Multilingual Spoken Language Understanding).
-- **Language / Locale:** English (`en-US` partition).
-- **Size:** 16,521 curated utterances.
-- **Structure:**
-  - `id`: Unique record identifier.
-  - `utt`: Raw conversational utterance string.
-  - `intent`: Target intent class (60 unique classes).
-  - `scenario`: General semantic domain (18 unique domains, e.g., `calendar`, `iot`, `email`, `play`, `weather`).
-  - `partition`: Original split label (`train`, `dev`, `test`).
-  - `locale`: Localization code (`en-US`).
-- **Class Balance:** Imbalanced natural distribution. Top intent: `calendar_set` (1,150 samples); lowest intent: `cooking_query` (6 samples).
-- **License / Access:** Publicly released by Amazon Science under the Creative Commons Attribution 4.0 International (CC-BY 4.0) license.
+| Step | Use? | Tool | Why |
+|---|:---:|---|---|
+| Cleaning (URLs, special characters) | Yes | `re` | Removes symbol noise (0 URLs in this data, kept for safety) |
+| Tokenization | Yes | NLTK `word_tokenize` | Tokens for filtering and lemmatization |
+| Normalization | Yes | `str.lower`, `re`, contraction map | Lowercase, contractions, abbreviations, wake word |
+| Stop-word handling | Yes | NLTK (customised) | Keeps negations, on/off/up/down/in/out/from/now, question words |
+| Lemmatization | Yes | WordNetLemmatizer + `pos_tag` | Merges word forms without broken stems |
+| Punctuation & numbers | Yes | `re` | Numbers are spoken words; 0 digit utterances |
+| Emoji handling | No | – | 0 non-ASCII characters |
+| Encoding / language filtering | Yes | pandas, UTF-8 | Only en-US extracted; plain ASCII |
 
----
+Real samples (`clean_text`):
 
-# SECTION 4: Related Work (2023+)
+| Raw | After preprocessing |
+|---|---|
+| turn the lights off please | turn light off please |
+| wake me up at five am this week | wake up five am week |
+| olly pause for ten seconds | pause ten second |
+| tell me the time in g. m. t. plus five | tell time in gmt plus five |
+| start playing music from favorites | start play music from favorite |
 
-1. **FitzGerald et al. (2023), "MASSIVE: A 1M-Example Multilingual Speech-to-Intent Dataset", IEEE/ACM Transactions on Audio, Speech, and Language Processing.**  
-   *Method:* XLM-R and mT5 baselines across 51 languages and 60 intent classes.  
-   *Relevance:* Foundational benchmark establishing intent and slot-filling baselines on this exact dataset.
+Ablation (validation split, TF-IDF 1–2 grams + LinearSVC probe, **not** the Phase 2 model), accuracy / macro-F1: lowercase only 0.862 / 0.847; first pipeline 0.827 / 0.781; final `clean_text` 0.845 / 0.833; `norm_text` 0.861 / 0.834. Stop-word removal shrinks the vocabulary by 16.9% but does not improve this probe, so Phase 2 tests both columns.
 
-2. **Zhang, L., & Howard, A. (2023), "Intent Detection in Low-Resource Domains via Contrastive Representation Learning", In Proceedings of ACL 2023.**  
-   *Method:* Supervised contrastive loss combined with fine-tuned RoBERTa encoders.  
-   *Reported Results:* 94.2% Accuracy on benchmark intent datasets; superior handling of tail classes.  
-   *Relevance:* Informs our Phase 2 exploration of embedding spaces for imbalanced intent categories.
+## Section 7: Division of tasks
 
-3. **Al-Qurishi, M., et al. (2024), "Comparative Study of N-gram TF-IDF vs. Transformer Encoders for Task-Oriented Dialogue Systems", Springer Journal of Artificial Intelligence Research.**  
-   *Method:* Benchmarking TF-IDF + Support Vector Machines (SVM) against DistilBERT for conversational short texts.  
-   *Reported Results:* DistilBERT outperformed SVM by 4.8% Macro F1, but TF-IDF + LinearSVC achieved sub-millisecond inference latencies suitable for edge deployment.  
-   *Relevance:* Serves as the blueprint for our Phase 2 baseline vs. transformer comparative experiments.
+| Member | Responsibilities |
+|---|---|
+| Karam Abdallah Abdelkarim Abu-Juma'a | Architecture, `download_data.py`, stratified split, EDA report, proposal and submission |
+| Omar Al-Zubaidi | Contraction dictionary, regex normalisation, abbreviation collapsing, stop-word policy |
+| Osama Shqair | POS-aware lemmatization, ablation (`benchmark_preprocessing.py`), dataset validation and quality control, related work and references |
 
-4. **Kalyan, K. S., et al. (2023), "A Survey on Bidirectional Encoder Representations from Transformers (BERT) for Spoken Language Understanding", Elsevier Computer Speech & Language.**  
-   *Method:* Comprehensive survey of tokenization and lemmatization trade-offs when feeding conversational text to transformer backbones.  
-   *Relevance:* Justifies preserving negation markers and contraction expansion during preprocessing.
+## Section 8: Timeline
 
----
+| Week | Milestone | Responsible | Deliverable |
+|---|---|---|---|
+| 5 | Phase 1: proposal, audit, preprocessing, ablation | All | Form, `src/`, `outputs/` |
+| 7 | Text representation experiments (BoW, TF-IDF, embeddings) | Omar, Osama | Feature scripts, first baselines |
+| 9 | Phase 2: baselines and DistilBERT fine-tuning | All | Progress report, model code |
+| 11 | Error analysis and tuning | Karam, Omar | Evaluation tables and plots |
+| 12 | Phase 3: integrated pipeline, demo, report, slides, defense | All | Final report, slides, demo |
 
-# SECTION 5: Text Analysis & Data-Quality Issues
+## Section 9: References
 
-| Data-Quality Issue | Concrete Example from Data | Planned & Implemented Handling |
-|--------------------|----------------------------|--------------------------------|
-| **Contractions & Slang** | *"don't play that song"*, *"what's the weather"* | Mapped via regular expression expansion dictionary into *"do not"*, *"what is"*. |
-| **Case Inconsistency** | *"WAKE ME UP"*, *"Set Alarm"*, *"quiet"* | Lowercasing all utterances to consolidate duplicate word tokens. |
-| **Noise & Special Characters** | Punctuation, symbols, quotes, trailing whitespace | Regex filter `[^a-z0-9\s]` retaining only alphanumeric tokens and single spaces. |
-| **Stop-Word Loss of Negation** | Standard NLTK stop-words remove *"not"*, turning *"do not turn off"* into *"turn off"* | Filtered stop-word set to explicitly retain negation markers: `not`, `no`, `never`, `nor`, `neither`, `none`. |
-| **Morphological Variations** | *"setting"*, *"set"*, *"alarms"*, *"alarm"* | WordNet Lemmatizer applied to map inflected forms back to canonical lemmas. |
-| **Class Imbalance** | `calendar_set` has 1,150 samples; `cooking_query` has 6 samples | Applied custom stratified 3-way 80/10/10 splitting to guarantee all classes exist in train, validation, and test sets. |
-
----
-
-# SECTION 6: Preprocessing Plan
-
-| Step | Applied? | Tool / Library | Technical Justification |
-|------|:--------:|----------------|-------------------------|
-| **Cleaning (URLs, Symbols, Noise)** | Yes | Python `re` (Regex) | Eliminates syntax noise and unifies vocabulary representations. |
-| **Contraction Expansion** | Yes | Python `re` + Mapping Dict | Normalizes colloquial spoken contractions (`don't` $\to$ `do not`). |
-| **Case Normalization** | Yes | Python `.lower()` | Eliminates duplicate vocabulary caused by capitalization. |
-| **Tokenization** | Yes | NLTK `word_tokenize` | Splits normalized strings into discrete syntactic tokens. |
-| **Negation-Aware Stop-Word Removal** | Yes | NLTK `stopwords` (Customized) | Removes non-informative words while strictly preserving critical negations. |
-| **Lemmatization** | Yes | NLTK `WordNetLemmatizer` | Reduces words to dictionary lemmas without destructive stemming truncation. |
-
-### Sample Transformation Outputs
-
-```
-Raw Utterance:   "wake me up at five am this week"
-Clean Utterance: "wake five week"
-
-Raw Utterance:   "set an alarm for two hours from now"
-Clean Utterance: "set alarm two hour"
-
-Raw Utterance:   "please don't forget to email John about the dinner"
-Clean Utterance: "please do not forget email john dinner"
-```
-
----
-
-# SECTION 7: Division of Tasks
-
-| Member Name | Assigned Tasks & Deliverables |
-|-------------|-------------------------------|
-| **Karam Abdallah Abdelkarim Abu-Juma'a** (Leader) | System architecture, `src/download_data.py`, stratified split implementation, automated EDA calculations, proposal authoring. |
-| **Omar** | Preprocessing regex pipeline, contraction dictionary expansion, negation filter retention logic, data auditing. |
-| **Osama** | NLTK integration, lemmatization benchmarking, test set verification, preprocessing report validation. |
-
----
-
-# SECTION 8: Project Timeline (PBL Milestones)
-
-| Week | Milestone / Task | Deliverable | Responsible |
-|------|------------------|-------------|-------------|
-| **Week 5** | Phase 1: Problem Definition, Dataset Ingestion, Preprocessing & EDA Report | `docs/`, `src/`, `Data/` (splits), `outputs/preprocessing_report.json` | All Members |
-| **Week 7** | Text Representation Experiments (Bag-of-Words, TF-IDF, Word2Vec, Dense Embeddings) | Feature vector extraction scripts | Omar & Osama |
-| **Week 9** | Phase 2: Model Development & Evaluation (Baseline ML vs. Transformer Fine-Tuning) | Model training code, validation metrics, progress report | All Members |
-| **Week 11** | Model Optimization, Error Analysis, Confusion Matrix Interpretability | Evaluation reports and plots | Karam & Omar |
-| **Week 12** | Phase 3: Final Integrated NLP Pipeline, Technical Report, Presentation & Defense | Final report (paper format), presentation slides, live demonstration | All Members |
-
----
-
-# SECTION 9: References (IEEE Style, 2023+)
-
-- **[1]** J. FitzGerald et al., "MASSIVE: A 1M-Example Multilingual Speech-to-Intent Dataset with 51 Languages," *IEEE/ACM Transactions on Audio, Speech, and Language Processing*, vol. 31, pp. 2898–2914, 2023.
-- **[2]** L. Zhang and A. Howard, "Intent Detection in Low-Resource Domains via Contrastive Representation Learning," in *Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)*, Toronto, Canada, 2023, pp. 4112–4125.
-- **[3]** M. Al-Qurishi, K. Al-Badr, and S. Al-Mutawa, "Benchmarking Classical Feature Representation against Fine-Tuned Transformer Encoders for Task-Oriented Intent Detection," *Springer Journal of Artificial Intelligence Research*, vol. 78, no. 4, pp. 589–608, 2024.
-- **[4]** K. S. Kalyan, A. Rajasekharan, and S. Sangeetha, "A Survey on Bidirectional Encoder Representations from Transformers (BERT) for Spoken Language Understanding," *Elsevier Computer Speech & Language*, vol. 80, p. 101485, 2023.
-- **[5]** H. Liu, R. Yan, and Z. Cao, "Robust Intent Classification under Out-of-Scope and Adversarial Perturbations," *ACM Transactions on Intelligent Systems and Technology*, vol. 15, no. 2, pp. 1–22, 2024.
+1. J. FitzGerald et al., "MASSIVE: A 1M-Example Multilingual Natural Language Understanding Dataset with 51 Typologically-Diverse Languages," in *Proc. 61st Annu. Meeting Assoc. Comput. Linguistics (Vol. 1: Long Papers)*, Toronto, Canada, Jul. 2023, pp. 4277–4302, doi: 10.18653/v1/2023.acl-long.235.
+2. H. Zhang, H. Liang, L. Zhan, A. Y. S. Lam, and X.-M. Wu, "Revisit few-shot intent classification with PLMs: Direct fine-tuning vs. continual pre-training," in *Findings Assoc. Comput. Linguistics: ACL 2023*, Toronto, Canada, Jul. 2023, pp. 11105–11121, doi: 10.18653/v1/2023.findings-acl.706.
+3. G. Arora, S. Jain, and S. Merugu, "Intent detection in the age of LLMs," arXiv:2410.01627 [cs.CL], Oct. 2024.
+4. M. Lichouri, K. Lounnas, and M. Z. Amziane, "dzFinNlp at AraFinNLP: Improving intent detection in financial conversational agents," arXiv:2407.13565 [cs.CL], Jul. 2024.

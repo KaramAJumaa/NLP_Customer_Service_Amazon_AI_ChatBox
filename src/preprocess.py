@@ -3,6 +3,20 @@ Text Preprocessing & Exploratory Data Analysis (EDA) Pipeline
 Project: Intent Classification
 Course: Natural Language Processing (A0443404) - Middle East University (MEU)
 Dataset: Amazon MASSIVE (en-US Localization)
+
+Design notes (v2)
+-----------------
+* Stop-word removal keeps negations AND the function words that change the
+  intent of a command (on / off / up / down / in / out / before / after ...).
+  With the default NLTK list, "turn on the lights" and "turn off the lights"
+  both became "turn light".
+* Spoken time markers ("p. m.", "a. m.") are normalised to "pm" / "am" and "am"
+  is kept only after a number ("five am"), so "i am" is still removed.
+* Lemmatization is POS-aware (WordNetLemmatizer defaults to nouns, so
+  "setting" stayed "setting").
+* The wake word "olly" (534 utterances) is removed because it carries no intent.
+* An utterance is never left empty: if every token is a stop-word we fall back
+  to the full token list.
 """
 
 import os
@@ -13,7 +27,7 @@ import pandas as pd
 import numpy as np
 
 import nltk
-from nltk.corpus import stopwords
+from nltk.corpus import stopwords, wordnet
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 
@@ -27,6 +41,8 @@ TRAIN_OUTPUT_PATH = os.path.join(DATA_DIR, "train_cleaned.csv")
 VAL_OUTPUT_PATH = os.path.join(DATA_DIR, "val_cleaned.csv")
 TEST_OUTPUT_PATH = os.path.join(DATA_DIR, "test_cleaned.csv")
 REPORT_OUTPUT_PATH = os.path.join(OUTPUTS_DIR, "preprocessing_report.json")
+EXAMPLES_MD_PATH = os.path.join(OUTPUTS_DIR, "before_after_examples.md")
+EXAMPLES_CSV_PATH = os.path.join(OUTPUTS_DIR, "before_after_examples.csv")
 
 # Comprehensive English contraction map
 CONTRACTION_MAP = {
@@ -111,9 +127,62 @@ def expand_contractions(text: str) -> str:
     return CONTRACTION_PATTERN.sub(replace, text)
 
 
+
+# ---------------------------------------------------------------------------
+# Stop-word policy
+# ---------------------------------------------------------------------------
+# In intent classification, negations carry crucial semantics
+# (e.g. 'do not cancel order' vs 'cancel order').
+NEGATION_TOKENS = {"not", "no", "nor", "never", "neither", "none"}
+
+# NLTK lists these as stop-words, but removing them destroys the contrast
+# between intents such as iot_hue_lighton / iot_hue_lightoff or
+# audio_volume_up / audio_volume_down, or the time reference of a command.
+SEMANTIC_FUNCTION_WORDS = {
+    "on", "off", "up", "down", "in", "out", "over", "under", "above", "below",
+    "before", "after", "from", "until", "between", "again", "more", "most",
+    "few", "all", "now",
+}
+
+# The voice-assistant wake word that appears in hundreds of utterances.
+# It says nothing about the intent, so it is removed (unless it is the only token).
+WAKE_WORDS = {"olly"}
+
+# Question words and auxiliaries separate a QUERY from a COMMAND:
+# "do i have any alarms" (alarm_query) vs "alarm for ten am" (alarm_set),
+# "did i add milk to the list" (lists_query) vs "add milk to my list" (lists_createoradd).
+QUESTION_AND_AUXILIARY_WORDS = {
+    "what", "when", "where", "who", "whom", "which", "why", "how",
+    "do", "does", "did", "is", "are", "was", "were",
+    "can", "could", "will", "would", "should", "have", "has", "had",
+}
+
+PROTECTED_WORDS = NEGATION_TOKENS | SEMANTIC_FUNCTION_WORDS | QUESTION_AND_AUXILIARY_WORDS
+
+# "am" is an NLTK stop-word (as in "i am"), but "five am" is a time marker.
+NUMBER_WORDS = {
+    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "fifteen", "twenty", "thirty", "forty", "fifty",
+    "noon", "oh", "clock", "quarter", "half",
+}
+
+# Dotted abbreviations are collapsed: "p. m." -> "pm", "a. m." -> "am",
+# "b. b. c." -> "bbc", "g. m. t." -> "gmt".  Without this, the single letters
+# are split by the tokenizer and then dropped as stop-words ("m", "t", "s").
+ABBREVIATION_PATTERN = re.compile(r"\b(?:[a-z]\s?\.\s?){2,}")
+
+
+def collapse_abbreviations(text: str) -> str:
+    """Join dotted letter sequences into one token (keeps a space around it)."""
+    return ABBREVIATION_PATTERN.sub(lambda m: " " + re.sub(r"[^a-z]", "", m.group(0)) + " ", text)
+
+
 def setup_nltk():
     """Ensure essential NLTK resources and tokenizers are available."""
-    packages = ["punkt", "punkt_tab", "stopwords", "wordnet"]
+    packages = [
+        "punkt", "punkt_tab", "stopwords", "wordnet",
+        "averaged_perceptron_tagger", "averaged_perceptron_tagger_eng",
+    ]
     for pkg in packages:
         try:
             nltk.download(pkg, quiet=True)
@@ -121,28 +190,61 @@ def setup_nltk():
             print(f"[WARN] NLTK download '{pkg}' encountered: {e}")
 
 
-def initialize_nlp_tools():
-    """Build stopwords set retaining critical negation tokens and initialize lemmatizer."""
+def initialize_nlp_tools(protected_words=None):
+    """Build the stop-word set (negations + intent-bearing function words kept)
+    and initialize the lemmatizer."""
     setup_nltk()
-    stop_words = set(stopwords.words("english"))
-    # In intent classification, negations carry crucial semantics
-    # (e.g., 'do not cancel order' vs 'cancel order')
-    negation_tokens = {"not", "no", "nor", "never", "neither", "none"}
-    stop_words = stop_words - negation_tokens
+    if protected_words is None:
+        protected_words = PROTECTED_WORDS
+    stop_words = set(stopwords.words("english")) - set(protected_words)
     lemmatizer = WordNetLemmatizer()
     return stop_words, lemmatizer
 
 
+def _wordnet_pos(treebank_tag: str) -> str:
+    """Map a Penn Treebank POS tag to a WordNet POS constant."""
+    if treebank_tag.startswith("J"):
+        return wordnet.ADJ
+    if treebank_tag.startswith("V"):
+        return wordnet.VERB
+    if treebank_tag.startswith("R"):
+        return wordnet.ADV
+    return wordnet.NOUN
+
+
+def _pos_tag(tokens):
+    """POS-tag tokens; return None if the tagger resource is unavailable."""
+    try:
+        return nltk.pos_tag(tokens)
+    except LookupError:
+        return None
+
+
+def _lemmatize(tokens, lemmatizer):
+    """POS-aware lemmatization (falls back to verb-then-noun if no tagger)."""
+    tagged = _pos_tag(tokens)
+    if tagged is not None:
+        return [lemmatizer.lemmatize(tok, _wordnet_pos(tag)) for tok, tag in tagged]
+    lemmas = []
+    for tok in tokens:
+        as_verb = lemmatizer.lemmatize(tok, wordnet.VERB)
+        lemmas.append(as_verb if as_verb != tok else lemmatizer.lemmatize(tok, wordnet.NOUN))
+    return lemmas
+
+
 def clean_text_pipeline(text: str, stop_words: set, lemmatizer: WordNetLemmatizer) -> str:
     """
-    Production preprocessing pipeline:
+    Preprocessing pipeline:
     1. String cast & lowercasing
     2. Contraction expansion (e.g., don't -> do not)
-    3. URL and Email stripping
-    4. Alphanumeric regex cleaning (retaining alphanumeric & spaces)
-    5. NLTK word tokenization
-    6. Stop-word filtering (preserving negation markers)
-    7. WordNet lemmatization
+    3. Dotted-abbreviation / time-marker normalisation (p. m. -> pm, b. b. c. -> bbc)
+    4. URL and Email stripping
+    5. Alphanumeric regex cleaning (retaining alphanumeric & spaces)
+    6. NLTK word tokenization, then removal of the wake word "olly"
+    7. Stop-word filtering (negations + intent-bearing function words kept;
+       "am" kept only as a time marker)
+    8. POS-aware WordNet lemmatization
+    9. Fallback: never return an empty string
     """
     if not isinstance(text, str):
         return ""
@@ -153,25 +255,45 @@ def clean_text_pipeline(text: str, stop_words: set, lemmatizer: WordNetLemmatize
     # 2. Contraction expansion
     text = expand_contractions(text)
 
-    # 3. URL & Email strip
+    # 3. Dotted abbreviations / time markers must be handled before punctuation is stripped
+    text = collapse_abbreviations(text)
+
+    # 4. URL & Email strip
     text = re.sub(r"https?://\S+|www\.\S+", " ", text)
     text = re.sub(r"\S+@\S+", " ", text)
 
-    # 4. Alphanumeric regex cleaning
+    # 5. Alphanumeric regex cleaning
     text = re.sub(r"[^a-z0-9\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
 
-    # 5. Tokenization
+    # 6. Tokenization
     tokens = word_tokenize(text)
+    if not tokens:
+        return ""
 
-    # 6. Stop-word removal & 7. Lemmatization
-    cleaned_tokens = [
-        lemmatizer.lemmatize(token)
-        for token in tokens
-        if token not in stop_words and len(token) > 0
-    ]
+    # 6b. Wake-word removal (keep the tokens if nothing else would remain)
+    without_wake = [t for t in tokens if t not in WAKE_WORDS]
+    if without_wake:
+        tokens = without_wake
 
-    return " ".join(cleaned_tokens)
+    # 7. Stop-word removal ("am" survives only right after a number / number word)
+    kept = []
+    for i, token in enumerate(tokens):
+        if token == "am" and i > 0 and (tokens[i - 1].isdigit() or tokens[i - 1] in NUMBER_WORDS):
+            kept.append(token)
+        elif token not in stop_words:
+            kept.append(token)
+
+    # 9. Fallback: an utterance made only of stop-words keeps its tokens
+    if not kept:
+        kept = tokens
+
+    # 8. Lemmatization (POS-aware); the time marker "am" must not become "be"
+    lemmas = _lemmatize(kept, lemmatizer)
+    for i, token in enumerate(kept):
+        if token == "am" and i > 0 and (kept[i - 1].isdigit() or kept[i - 1] in NUMBER_WORDS):
+            lemmas[i] = "am"
+    return " ".join(lemmas)
 
 
 def compute_vocabulary(series: pd.Series) -> set:
@@ -183,7 +305,42 @@ def compute_vocabulary(series: pd.Series) -> set:
     return vocab
 
 
+def count_label_conflicts(texts: pd.Series, labels: pd.Series):
+    """Number of distinct texts that are attached to more than one intent.
+
+    Used as a quality-control check: preprocessing must not *create* conflicts
+    that do not exist in the raw data (e.g. 'turn on/off the light')."""
+    tmp = pd.DataFrame({"t": texts.astype(str).str.strip().str.lower(), "y": labels.values})
+    per_text = tmp.groupby("t")["y"].nunique()
+    return int((per_text > 1).sum()), int(len(per_text))
+
+
+def data_quality_audit(df: pd.DataFrame, text_col: str, intent_col: str) -> dict:
+    """Concrete, countable data-quality findings on the RAW utterances."""
+    s = df[text_col].astype(str)
+    counts = df[intent_col].value_counts()
+    conflicts, unique_texts = count_label_conflicts(s, df[intent_col])
+    return {
+        "rows": int(len(df)),
+        "missing_values": int(df[[text_col, intent_col]].isna().sum().sum()),
+        "exact_duplicate_utterances": int(s.duplicated().sum()),
+        "utterances_with_uppercase": int(s.str.contains(r"[A-Z]").sum()),
+        "utterances_with_apostrophe_contraction": int(s.str.contains(r"['’]").sum()),
+        "utterances_with_punctuation_other_than_apostrophe": int(s.str.contains(r"[^\w\s'’]").sum()),
+        "utterances_with_dotted_time_or_abbreviation": int(s.str.contains(r"\b[a-z]\. [a-z]\.", case=False).sum()),
+        "utterances_with_digits": int(s.str.contains(r"\d").sum()),
+        "utterances_with_url_or_email": int(s.str.contains(r"https?://|www\.|\S+@\S+").sum()),
+        "utterances_with_non_ascii": int(s.apply(lambda x: any(ord(c) > 127 for c in x)).sum()),
+        "utterances_with_one_or_two_words": int((s.str.split().str.len() <= 2).sum()),
+        "utterances_containing_wake_word_olly": int(s.str.contains(r"\bolly\b", case=False).sum()),
+        "raw_texts_with_conflicting_intents": conflicts,
+        "unique_raw_texts": unique_texts,
+        "class_imbalance_ratio_max_over_min": round(float(counts.max() / counts.min()), 1),
+    }
+
+
 def stratified_split_80_10_10(df: pd.DataFrame, target_col: str, random_state: int = 42):
+
     """
     Stratifies dataset into 80% train, 10% validation, 10% test.
     Guarantees every class with >= 3 samples is distributed across all partitions,
@@ -226,6 +383,59 @@ def stratified_split_80_10_10(df: pd.DataFrame, target_col: str, random_state: i
     return train_df, val_df, test_df
 
 
+
+
+# Categories used to build the "before / after" examples for the proposal.
+EXAMPLE_CATEGORIES = [
+    ("Contraction expansion",        r"\b(?:don't|can't|what's|i'm|won't|isn't)\b", None),
+    ("Negation preserved",           r"\b(?:don't|not|never)\b", None),
+    ("on/off kept (light on)",       r"\bon\b", "iot_hue_lighton"),
+    ("on/off kept (light off)",      r"\boff\b", "iot_hue_lightoff"),
+    ("up/down kept (volume up)",     r"\bup\b", "audio_volume_up"),
+    ("up/down kept (volume down)",   r"\bdown\b", "audio_volume_down"),
+    ("Time marker (p. m. -> pm)",    r"\b[ap]\. m\.", None),
+    ("Dotted abbreviation",          r"\b[a-z]\. [a-z]\. [a-z]\.", None),
+    ("Verb forms (lemmatization)",   r"\b(?:setting|playing|waking|reminding|turning|ordering)\b", None),
+    ("Wake word 'olly' removed",     r"^olly\b", None),
+    ("Time marker (am after a number)", r"\bfive am\b|\bten am\b|\bseven am\b|\bsix am\b", None),
+]
+
+
+def build_before_after_examples(df: pd.DataFrame, text_col: str, intent_col: str) -> pd.DataFrame:
+    """Pick one real utterance per category (deterministic) for documentation."""
+    rows = []
+    word_counts = df[text_col].astype(str).str.split().str.len()
+    for label, pattern, intent in EXAMPLE_CATEGORIES:
+        mask = df[text_col].astype(str).str.contains(pattern, regex=True) & word_counts.between(4, 10)
+        if intent is not None:
+            mask &= df[intent_col] == intent
+        hit = df[mask]
+        if hit.empty:
+            continue
+        r = hit.iloc[0]
+        rows.append({
+            "category": label,
+            "intent": r[intent_col],
+            "raw_text": r[text_col],
+            "after_preprocessing": r["clean_text"],
+            "norm_text_no_stopword_removal": r["norm_text"],
+        })
+    return pd.DataFrame(rows)
+
+
+def export_before_after_examples(examples: pd.DataFrame) -> None:
+    examples.to_csv(EXAMPLES_CSV_PATH, index=False, encoding="utf-8")
+    lines = ["# Before / after preprocessing (real utterances from Amazon MASSIVE en-US)", "",
+             "| Category | Intent | Raw text | clean_text (stop-words removed) | norm_text (all words kept) |",
+             "|---|---|---|---|---|"]
+    for r in examples.itertuples(index=False):
+        lines.append(
+            f"| {r.category} | `{r.intent}` | {r.raw_text} | {r.after_preprocessing} | {r.norm_text_no_stopword_removal} |"
+        )
+    with open(EXAMPLES_MD_PATH, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 def run_preprocessing_pipeline():
     """Executes data ingestion, text preprocessing, EDA calculation, and export."""
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -254,6 +464,17 @@ def run_preprocessing_pipeline():
     if dropped_nulls > 0:
         print(f"[INFO] Dropped {dropped_nulls} records with null values.")
 
+    # Raw data-quality audit (counts used in Section 5 of the proposal)
+    print("[INFO] Auditing raw data quality...")
+    audit = data_quality_audit(df, text_col, intent_col)
+
+    # De-duplication: identical (utterance, intent) pairs would leak between train and test.
+    # Same text with a DIFFERENT intent is label noise and is kept (it is reported, not hidden).
+    rows_before_dedup = len(df)
+    df = df.drop_duplicates(subset=[text_col, intent_col]).reset_index(drop=True)
+    rows_removed = rows_before_dedup - len(df)
+    print(f"[INFO] Removed {rows_removed} exact duplicate (utterance, intent) rows -> {len(df):,} rows remain.")
+
     # Initialize NLP tools
     stop_words, lemmatizer = initialize_nlp_tools()
 
@@ -264,9 +485,16 @@ def run_preprocessing_pipeline():
     raw_char_counts = df[text_col].apply(lambda s: len(str(s)))
 
     # Apply preprocessing pipeline
-    print("[INFO] Applying text normalization, contraction expansion, stop-word filtering & lemmatization...")
+    print("[INFO] Applying normalization, contraction expansion, stop-word filtering & POS-aware lemmatization...")
     df["clean_text"] = df[text_col].apply(
         lambda t: clean_text_pipeline(t, stop_words, lemmatizer)
+    )
+
+    # Second representation: same normalisation + lemmatization, but NO stop-word removal.
+    # The ablation (src/benchmark_preprocessing.py) shows that stop-word removal hurts intent
+    # classification on short commands, so 'norm_text' is the recommended input for TF-IDF/BoW.
+    df["norm_text"] = df[text_col].apply(
+        lambda t: clean_text_pipeline(t, set(), lemmatizer)
     )
 
     # Cleaned EDA statistics
@@ -274,6 +502,15 @@ def run_preprocessing_pipeline():
     clean_vocab = compute_vocabulary(df["clean_text"])
     clean_word_counts = df["clean_text"].apply(lambda s: len(str(s).split()))
     clean_char_counts = df["clean_text"].apply(lambda s: len(str(s)))
+
+    # Quality control: preprocessing must not create empty rows or new label conflicts
+    empty_clean = int((df["clean_text"].str.strip() == "").sum())
+    raw_conflicts, _ = count_label_conflicts(df[text_col], df[intent_col])
+    clean_conflicts, clean_unique = count_label_conflicts(df["clean_text"], df[intent_col])
+    norm_conflicts, _ = count_label_conflicts(df["norm_text"], df[intent_col])
+    norm_vocab = compute_vocabulary(df["norm_text"])
+    print(f"[QC] Empty cleaned utterances: {empty_clean}")
+    print(f"[QC] Texts with conflicting intents  raw: {raw_conflicts} | clean_text: {clean_conflicts} | norm_text: {norm_conflicts}")
 
     # Class distribution analysis
     intent_counts = df[intent_col].value_counts().to_dict()
@@ -292,6 +529,23 @@ def run_preprocessing_pipeline():
         "task": "Intent Classification (Single-label Multi-class)",
         "total_samples": int(len(df)),
         "num_classes": int(num_classes),
+        "raw_data_quality_audit": audit,
+        "deduplication": {
+            "rows_before": int(rows_before_dedup),
+            "exact_duplicate_rows_removed": int(rows_removed),
+            "rows_after": int(len(df)),
+        },
+        "preprocessing_config": {
+            "lowercase": True,
+            "contraction_expansion": True,
+            "abbreviation_normalisation": "p. m. -> pm, a. m. -> am, b. b. c. -> bbc",
+            "stop_words": "NLTK English minus protected words",
+            "protected_words_kept": sorted(PROTECTED_WORDS),
+            "am_rule": "kept only after a digit or number word (and never lemmatized to 'be')",
+            "wake_words_removed": sorted(WAKE_WORDS),
+            "lemmatization": "WordNet, POS-aware (NLTK pos_tag)",
+            "empty_result_fallback": "keep all tokens"
+        },
         "raw_text_metrics": {
             "vocab_size": int(len(raw_vocab)),
             "avg_word_count": round(float(raw_word_counts.mean()), 2),
@@ -308,6 +562,18 @@ def run_preprocessing_pipeline():
             "max_word_count": int(clean_word_counts.max()),
             "avg_char_length": round(float(clean_char_counts.mean()), 2),
             "vocab_reduction_pct": round((1.0 - (len(clean_vocab) / len(raw_vocab))) * 100, 2)
+        },
+        "norm_text_metrics": {
+            "description": "same normalisation + POS-aware lemmatization, no stop-word removal",
+            "vocab_size": int(len(norm_vocab)),
+            "avg_word_count": round(float(df["norm_text"].str.split().str.len().mean()), 2)
+        },
+        "quality_control": {
+            "empty_cleaned_utterances": empty_clean,
+            "texts_with_conflicting_intents_raw": raw_conflicts,
+            "texts_with_conflicting_intents_clean_text": clean_conflicts,
+            "texts_with_conflicting_intents_norm_text": norm_conflicts,
+            "conflicts_created_by_stopword_removal": clean_conflicts - norm_conflicts
         },
         "class_distribution_summary": {
             "num_unique_intents": num_classes,
@@ -355,15 +621,18 @@ def run_preprocessing_pipeline():
         json.dump(eda_summary, f, indent=4)
     print(f"[SUCCESS] Exported preprocessing & EDA report to: {REPORT_OUTPUT_PATH}")
 
+    # Export real before/after examples (used in the proposal, Section 6)
+    examples = build_before_after_examples(df, text_col, intent_col)
+    export_before_after_examples(examples)
+    print(f"[SUCCESS] Exported before/after examples to: {EXAMPLES_MD_PATH}")
+
     # Display sample transformations
     print("\n--- SAMPLE PREPROCESSING TRANSFORMATIONS ---")
-    for idx in range(min(5, len(df))):
-        raw_val = df[text_col].iloc[idx]
-        clean_val = df["clean_text"].iloc[idx]
-        intent_val = df[intent_col].iloc[idx]
-        print(f"[{intent_val}]")
-        print(f"  Raw:   \"{raw_val}\"")
-        print(f"  Clean: \"{clean_val}\"")
+    for r in examples.itertuples(index=False):
+        print(f"[{r.intent}] ({r.category})")
+        print(f"  Raw:   \"{r.raw_text}\"")
+        print(f"  Clean: \"{r.after_preprocessing}\"")
+        print(f"  Norm:  \"{r.norm_text_no_stopword_removal}\"")
     print("-------------------------------------------\n")
 
     return eda_summary

@@ -1,179 +1,152 @@
-# Intent Classification for Conversational AI (Amazon MASSIVE)
+# Intent Classification for Voice Assistants and Conversational Agents (Amazon MASSIVE)
 
-[![Course](https://img.shields.io/badge/Course-A0443404%20Natural%20Language%20Processing-blue.svg)](file:///docs/NLP_Course_Project_PBL_Description.pdf)
-[![Institution](https://img.shields.io/badge/University-Middle%20East%20University%20(MEU)-darkred.svg)](https://meu.edu.jo)
-[![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.14-blue.svg)](https://python.org)
-[![Phase](https://img.shields.io/badge/Project%20Status-Phase%201%20Complete-brightgreen.svg)](#)
-[![Dataset](https://img.shields.io/badge/Dataset-Amazon%20MASSIVE%20(en--US)-orange.svg)](https://github.com/alexa/massive)
+**Course:** Natural Language Processing (A0443404) · Middle East University (MEU), Faculty of Information Technology
+**Instructors:** Dr. Israa Al Badarneh · Dr. Zaid Alhalhouli · **Semester:** First 2026/2027
+**This repository:** Phase 1 (Proposal & NLP Data Preparation). No model training for the final system is included yet.
 
 ---
 
-## 📌 Project Overview
+## Project overview
 
-This repository hosts **Phase 1 (Proposal & NLP Data Preparation)** of the Problem-Based Learning (PBL) project for the **Natural Language Processing course (A0443404)** at **Middle East University (MEU)**, Faculty of Information Technology.
+Voice assistants and chatbots must map a short, informal request to one action (an *intent*), for example
+`"wake me up at five am this week"` → `alarm_set`. This project builds the full NLP pipeline for that task on the
+**Amazon MASSIVE (en-US)** dataset: 60 intents grouped in 18 scenarios.
 
-The goal of this project is to build an end-to-end, high-performance Intent Classification system for task-oriented conversational AI and smart voice assistants. Spoken and typed user queries are often noisy, informal, and varied. This pipeline processes user utterances and accurately maps them into one of **60 target intent categories** across **18 functional domains/scenarios**.
+Phase 1 covers the problem definition, dataset audit, preprocessing and a check that the preprocessing keeps
+the information the intent depends on. Phases 2–3 compare **TF-IDF + LinearSVC** with a fine-tuned **DistilBERT**
+using macro-F1 and accuracy.
 
----
+> MASSIVE contains voice-assistant commands (alarm, calendar, music, smart home, takeaway...). The method is also used
+> to route customer-support requests, but the data itself is not customer-support text.
 
-## 👥 Team Members
+## Team
 
 | Name | Role | Responsibilities |
 |---|---|---|
-| **Karam Abdallah Abdelkarim Abu-Juma'a** | **Group Leader** | System architecture, automated data ingestion (`download_data.py`), stratified splitting logic, EDA analysis, documentation & proposal lead. |
-| **Omar** | Team Member | Contraction dictionary expansion, regex text normalization, negation-aware stop-word retention logic. |
-| **Osama** | Team Member | WordNet lemmatization integration, tokenization benchmarking, dataset validation, quality control. |
+| Karam Abdallah Abdelkarim Abu-Juma'a | Group leader | Architecture, `download_data.py`, stratified split, EDA report, documentation, submission |
+| Omar Al-Zubaidi | Member | Contraction dictionary, regex normalisation, abbreviation collapsing, stop-word policy |
+| Osama Shqair | Member | POS-aware lemmatization, preprocessing ablation, dataset validation and quality control, related work and references |
 
-**Instructors:** Dr. Israa Al Badarneh · Dr. Zaid Alhalhouli  
-**Semester:** First Semester 2026/2027
-
----
-
-## 📂 Repository Directory Tree
+## Repository structure
 
 ```
-NLP-Intent-Classification/
-├── Data/                             # Dataset storage (excluded from git)
-│   ├── .gitkeep                      # Preserves directory in git tracking
-│   ├── massive_english.csv           # Raw downloaded en-US MASSIVE dataset (16,521 rows)
-│   ├── train_cleaned.csv             # Stratified train split (80% / 13,214 rows)
-│   ├── val_cleaned.csv               # Stratified validation split (10% / 1,652 rows)
-│   └── test_cleaned.csv              # Stratified test split (10% / 1,655 rows)
-├── docs/                             # Academic proposals & course documentation
-│   ├── NLP_Course_Project_PBL_Description.pdf # Official MEU course project specification
-│   ├── NLP_Project_Proposal_Form_Phase1.docx  # Phase 1 submission proposal template
-│   └── Project_Proposal_Phase1.md             # Complete, formatted Phase 1 Proposal
-├── outputs/                          # Automated EDA metrics & JSON artifacts
-│   ├── .gitkeep                      # Preserves directory in git tracking
-│   └── preprocessing_report.json     # Comprehensive preprocessing and EDA audit
-├── src/                              # Core Python pipeline modules
-│   ├── download_data.py              # Zero-compilation Amazon MASSIVE download script
-│   └── preprocess.py                 # Preprocessing, normalization, EDA, & 80/10/10 split
-├── .gitignore                        # Git exclusion rules (.venv, caches, raw CSVs)
-├── README.md                         # Project documentation and reproduction guide
-└── requirements.txt                  # Python dependencies
+Project/
+├── Data/                                   # git-ignored CSVs (included in the ZIP)
+│   ├── massive_english.csv                 # raw en-US data (16,521 rows)
+│   ├── train_cleaned.csv                   # stratified train split (13,149 rows)
+│   ├── val_cleaned.csv                     # stratified validation split (1,642 rows)
+│   └── test_cleaned.csv                    # stratified test split (1,648 rows)
+├── docs/
+│   ├── NLP_Course_Project_PBL_Description.pdf
+│   ├── NLP_Project_Proposal_Form_Phase1.docx          # blank official form
+│   ├── NLP_Project_Proposal_Form_Phase1_Filled.docx   # filled form (submission)
+│   └── Project_Proposal_Phase1.md                     # same proposal in Markdown
+├── outputs/
+│   ├── preprocessing_report.json           # EDA + data-quality audit + quality-control numbers
+│   ├── before_after_examples.md / .csv     # real raw vs. cleaned utterances
+│   └── preprocessing_ablation.md / .json   # comparison of 5 cleaning variants
+├── src/
+│   ├── download_data.py                    # downloads MASSIVE, keeps en-US
+│   ├── preprocess.py                       # audit, cleaning, de-duplication, 80/10/10 split
+│   └── benchmark_preprocessing.py          # preprocessing ablation (quality control)
+├── NLP Project Phase 1 Proposal.pdf        # PDF of the filled form
+├── requirements.txt
+└── README.md
 ```
 
----
+## Dataset
 
-## 💾 Flash-Drive Portability (Zero Compilation Barriers)
+| Item | Value |
+|---|---|
+| Source | Amazon MASSIVE v1.0, en-US file (https://github.com/alexa/massive) |
+| Rows | 16,521 raw → **16,439** after removing 82 exact duplicate (utterance, intent) rows |
+| Official partitions | train 11,514 / dev 2,033 / test 2,974 (kept in the `partition` column) |
+| Our split | stratified 80/10/10 → train 13,149 / val 1,642 / test 1,648, all 60 classes in each split |
+| Classes | 60 intents, 18 scenarios; `calendar_set` 1,147 samples vs. `cooking_query` 6 (about 190:1) |
+| License | CC BY 4.0 |
 
-To guarantee seamless evaluation and submission across different hardware environments and operating system letters (e.g. running directly from `D:\`, `E:\`, or `F:\` on university lab machines):
+### Data-quality findings on the raw text (`outputs/preprocessing_report.json`)
 
-- **Anchor Relative Paths:** All Python scripts locate directories dynamically using `os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`. No hardcoded drive letters or absolute paths exist anywhere in the codebase.
-- **Pure Python Dependencies:** Zero compiler toolchains (such as MSVC or C++ wheels) are required. All standard operations rely on `pandas`, `numpy`, `scikit-learn`, `nltk`, and `urllib`.
+| Finding | Count |
+|---|---:|
+| Utterances with apostrophes (mostly contractions) | 1,324 |
+| Utterances with dotted abbreviations (`p. m.`, `b. b. c.`) | 698 |
+| Utterances containing the wake word `olly` | 534 |
+| Utterances with only 1–2 words | 830 |
+| Exact duplicate utterances | 89 |
+| Texts labelled with two different intents (label noise) | 7 |
+| Uppercase / digits / URLs / e-mails / non-ASCII | 0 |
 
----
+## Preprocessing pipeline (`src/preprocess.py`)
 
-## 📊 Dataset Specification (Amazon MASSIVE)
+1. Lowercase and expand contractions with a mapping dictionary (`what's` → `what is`).
+2. Collapse dotted abbreviations (`p. m.` → `pm`, `g. m. t.` → `gmt`). Without this the tokenizer splits the letters and the stop-word filter deletes them.
+3. Strip URLs/e-mails and punctuation with regular expressions.
+4. Tokenize with NLTK `word_tokenize`; remove the wake word `olly`.
+5. Stop-word removal with a **customised** list. The NLTK list minus: negations (`not`, `no`, `never`...), direction/time words
+   (`on`, `off`, `up`, `down`, `in`, `out`, `before`, `after`, `from`, `now`...) and question/auxiliary words (`what`, `where`, `do`, `is`...).
+   `am` is kept only after a number (`five am`).
+6. **POS-aware** WordNet lemmatization (`setting` → `set`, `playing` → `play`). `WordNetLemmatizer` treats every word as a noun unless it receives the POS tag.
+7. An utterance is never left empty; if every token is a stop-word, all tokens are kept.
 
-We utilize the **Amazon MASSIVE (en-US localization)** dataset:
-- **Total Records:** 16,521 utterances.
-- **Number of Classes:** 60 discrete user intents.
-- **Semantic Domains:** 18 scenarios (`calendar`, `play`, `qa`, `email`, `iot`, `general`, `weather`, `transport`, `lists`, `news`, `recommendation`, `datetime`, `social`, `alarm`, `music`, `audio`, `takeaway`, `cooking`).
-- **Class Balance:** Naturally imbalanced. Ranging from 1,150 samples (`calendar_set`) down to 6 samples (`cooking_query`).
-- **License:** Creative Commons Attribution 4.0 International (CC-BY 4.0).
+The pipeline writes two columns: `clean_text` (stop-words removed) and `norm_text` (same steps, **all words kept**).
 
----
+### Why the stop-word list is customised
 
-## ⚙️ Phase 1 Data Pipeline Implementation
+With the default NLTK list, `"turn the lights off"` and `"turn the lights on"` both became `"turn light"`, and `"volume up"` / `"volume down"` both became `"volume"`.
 
-### 1. Robust Data Download (`src/download_data.py`)
-- Streams the compressed Amazon MASSIVE tar archive (`amazon-massive-dataset-1.0.tar.gz`) directly over HTTP using Python's standard `urllib.request`.
-- Selectively extracts member `1.0/data/en-US.jsonl` in memory, avoiding saving massive multilingual archives (~1M rows in 51 other languages) to disk.
-- Outputs `Data/massive_english.csv` with fields: `id`, `utt`, `intent`, `scenario`, `partition`, `locale`.
+| | Raw text | `clean_text` | `norm_text` |
+|---|---:|---:|---:|
+| Vocabulary size | 6,328 | 5,257 (−16.9%) | 5,314 (−16.0%) |
+| Mean words per utterance | 6.91 | 4.95 | 6.90 |
+| Texts attached to more than one intent | 7 | 40 | 12 |
+| Empty utterances | 0 | 0 | 0 |
 
-### 2. Preprocessing & Text Normalization (`src/preprocess.py`)
-- **Lowercasing & Normalization:** Standardizes letter casing and normalizes curly quotes (`’` $\to$ `'`).
-- **Contraction Expansion:** Replaces colloquial English contractions using an exhaustive mapping dictionary (e.g., `don't` $\to$ `do not`, `can't` $\to$ `cannot`, `what's` $\to$ `what is`).
-- **Regex Sanitization:** Strips external URLs, email addresses, and non-alphanumeric noise using `re.sub(r"[^a-z0-9\s]", " ", text)`.
-- **Negation-Preserving Stop-Word Removal:** Crucial for intent classification: while standard stop-word lists discard words like `not` and `no`, our pipeline explicitly preserves negation markers (`not`, `no`, `nor`, `never`, `neither`, `none`) so commands like *"do not cancel my alarm"* retain their opposite semantic meaning.
-- **WordNet Lemmatization:** Morphologically reduces inflected word variations (e.g., `alarms` $\to$ `alarm`, `setting` $\to$ `set`) without aggressive or destructive character truncation.
+### Real before / after examples (`outputs/before_after_examples.md`)
 
-### 3. Stratified 80/10/10 Split
-- Custom stratified 3-way partition distributing 80% to training, 10% to validation, and 10% to testing.
-- Guarantees **all 60 intent classes** are represented across all three partitions, even rare tail classes.
-  - **Train split:** 13,214 samples (79.98%)
-  - **Validation split:** 1,652 samples (10.00%)
-  - **Test split:** 1,655 samples (10.02%)
+| Raw | `clean_text` | `norm_text` |
+|---|---|---|
+| turn the lights off please | turn light off please | turn the light off please |
+| wake me up at five am this week | wake up five am week | wake me up at five am this week |
+| olly pause for ten seconds | pause ten second | pause for ten second |
+| tell me the time in g. m. t. plus five | tell time in gmt plus five | tell me the time in gmt plus five |
+| start playing music from favorites | start play music from favorite | start play music from favorite |
 
----
+### Preprocessing ablation (`python src/benchmark_preprocessing.py`)
 
-## 📈 Automated EDA & Preprocessing Metrics
+Same train/validation split, probe classifier = TF-IDF (1–2 grams) + LinearSVC. **This is not the Phase 2 model**; it only shows how much intent information each cleaning variant keeps.
 
-The automated pipeline outputs detailed quantitative diagnostics to `outputs/preprocessing_report.json`:
+| Variant | Vocab | Empty rows | Conflicting texts | Val accuracy | Val macro-F1 |
+|---|---:|---:|---:|---:|---:|
+| lowercase only | 6,110 | 0 | 8 | 0.8624 | 0.8473 |
+| first pipeline (default NLTK list, noun-only lemmas) | 5,420 | 24 | 134 | 0.8270 | 0.7805 |
+| + intent-bearing function words kept, POS lemmas | 5,244 | 0 | 84 | 0.8398 | 0.8299 |
+| `clean_text` (final, adds question/auxiliary words) | 5,257 | 0 | 40 | 0.8453 | 0.8325 |
+| `norm_text` (no stop-word removal) | 5,314 | 0 | 12 | 0.8605 | 0.8339 |
 
-| Metric | Raw Utterances | Cleaned Utterances | Change / Effect |
-|---|---|---|---|
-| **Vocabulary Size** | 6,328 words | 5,420 words | **-14.35% reduction** (noise reduced) |
-| **Mean Utterance Length** | 6.90 words | 3.88 words | Concentrated semantic tokens |
-| **Word Count Std. Dev.** | 3.29 words | 1.83 words | More uniform sequence length |
-| **Min / Max Word Count** | 1 / 61 words | 0 / 31 words | Eliminated outlier spam lengths |
-| **Mean Character Length**| 34.92 chars | 23.34 chars | Cleaned morphological footprint |
+Reading the table: the customisation removes most of the damage done by the default list (macro-F1 0.781 → 0.833, conflicts 134 → 40), but removing stop-words does not beat keeping them for this probe. Phase 2 therefore tests `clean_text` and `norm_text` (and raw text for DistilBERT).
 
-### Sample Before & After
+## Reproduce
 
-```text
-[alarm_set]
-  Raw:   "wake me up at five am this week"
-  Clean: "wake five week"
-
-[alarm_set]
-  Raw:   "set an alarm for two hours from now"
-  Clean: "set alarm two hour"
-
-[audio_volume_mute]
-  Raw:   "olly quiet"
-  Clean: "olly quiet"
-```
-
----
-
-## 🚀 Reproduction & Setup Guide
-
-### 1. Clone & Initialize Environment
 ```bash
-# Clone the repository
-git clone <repo-url>
-cd Project
-
-# Create virtual environment (Python 3.12 or 3.14)
 python -m venv .venv
-
-# Activate virtual environment
-# Windows PowerShell:
-.\.venv\Scripts\Activate.ps1
-# Linux / macOS:
-source .venv/bin/activate
-
-# Install required dependencies
+# Windows: .\.venv\Scripts\Activate.ps1      Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
+
+python src/download_data.py          # -> Data/massive_english.csv
+python src/preprocess.py             # -> Data/*_cleaned.csv, outputs/preprocessing_report.json, outputs/before_after_examples.*
+python src/benchmark_preprocessing.py  # -> outputs/preprocessing_ablation.*
 ```
 
-### 2. Download Dataset
-```bash
-python src/download_data.py
-```
-*Output: Saves raw English data to `Data/massive_english.csv` (16,521 rows).*
+NLTK resources (`punkt_tab`, `stopwords`, `wordnet`, POS tagger) are downloaded automatically on first run (internet needed).
+All paths are resolved relative to the project folder, so the project runs from any drive or folder.
 
-### 3. Run Preprocessing, EDA, and Splits
-```bash
-python src/preprocess.py
-```
-*Outputs:*
-- `Data/train_cleaned.csv`
-- `Data/val_cleaned.csv`
-- `Data/test_cleaned.csv`
-- `outputs/preprocessing_report.json`
+## Notes and limitations
 
----
+- The stratified split ignores the official MASSIVE `partition` column (kept in the CSVs). If Phase 2 results must be compared with the MASSIVE paper, switch to the official partitions.
+- 7 texts carry two different intents (for example `good night`). They are kept and reported, not hidden.
+- References [3] and [4] in the proposal are arXiv preprints; check their final published venue before the final report.
 
-## 🔮 Scope Notice & Phase 2 Outlook
+## Phase 2 outlook (Week 9)
 
-Per course project guidelines, **Phase 1** focuses strictly on Problem Formulation, Related Literature Review, Data Ingestion, and Preprocessing. **No model training code is included in this phase.**
-
-**Upcoming in Phase 2 (Week 9):**
-- Vectorization & Text Representations: Bag-of-Words (BoW), TF-IDF n-grams, and Dense Contextual Embeddings (Sentence-Transformers).
-- Baseline Modeling: Logistic Regression & Linear Support Vector Classifiers (LinearSVC).
-- Deep Learning / Transformer Benchmarks: Fine-tuning DistilBERT / RoBERTa models.
-- Macro F1 and Accuracy multi-class evaluation.
+Bag-of-Words and TF-IDF n-grams, sentence embeddings, logistic regression and LinearSVC baselines, DistilBERT fine-tuning, macro-F1 / accuracy / inference time, confusion-matrix error analysis.

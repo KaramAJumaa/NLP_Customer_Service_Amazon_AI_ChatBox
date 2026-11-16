@@ -1,0 +1,50 @@
+{
+    "note": "TF-IDF (1-2 grams) + LinearSVC is only a sanity probe for preprocessing quality; it is not the Phase 2 model.",
+    "raw_texts_with_conflicting_intents": 7,
+    "split": {
+        "train_rows": 13149,
+        "val_rows": 1642
+    },
+    "results": [
+        {
+            "variant": "lowercase_only",
+            "vocab_size": 6110,
+            "empty_utterances": 0,
+            "texts_with_conflicting_intents": 8,
+            "val_accuracy": 0.8624,
+            "val_macro_f1": 0.8473
+        },
+        {
+            "variant": "legacy_v1",
+            "vocab_size": 5420,
+            "empty_utterances": 24,
+            "texts_with_conflicting_intents": 134,
+            "val_accuracy": 0.827,
+            "val_macro_f1": 0.7805
+        },
+        {
+            "variant": "v2_function_words",
+            "vocab_size": 5244,
+            "empty_utterances": 0,
+            "texts_with_conflicting_intents": 84,
+            "val_accuracy": 0.8398,
+            "val_macro_f1": 0.8299
+        },
+        {
+            "variant": "v2_final",
+            "vocab_size": 5257,
+            "empty_utterances": 0,
+            "texts_with_conflicting_intents": 40,
+            "val_accuracy": 0.8453,
+            "val_macro_f1": 0.8325
+        },
+        {
+            "variant": "v2_keep_all_words",
+            "vocab_size": 5314,
+            "empty_utterances": 0,
+            "texts_with_conflicting_intents": 12,
+            "val_accuracy": 0.8605,
+            "val_macro_f1": 0.8339
+        }
+    ]
+}
